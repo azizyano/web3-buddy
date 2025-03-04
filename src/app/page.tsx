@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useAccount, useWalletClient } from "wagmi";
+import { useAccount, useBalance , useWalletClient } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import {
   Wallet,
@@ -12,11 +12,19 @@ import {
   BotMessageSquare,
   UserRound,
   NetworkIcon,
-  CoinsIcon
+  CoinsIcon, AlertCircle
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { ethers } from "ethers";
 import { getKyberQuote, createKyberSwap, parseKyberQuote } from "../lib/kyberswap";
+import MarketData from "@/components/Wallet/MarketData";
+import { Message } from "@/components/Chat/Message";
+import { getChainTokens, getTokenBySymbol, TokenConfig } from "@/config/tokens";
+import { QuoteDetails } from "@/components/Swap/QuoteDetails";
+import { validateAmount } from "@/lib/utils";
+import { waitForTransactionReceipt } from "@wagmi/core";
+import {config} from "@/app/providers";
+import { getCompleteMarketAnalysis } from "@/lib/market";
 
 interface QuoteData {
   routeSummary: any;
@@ -29,140 +37,312 @@ interface QuoteData {
 export default function Home() {
   const { address, chain, isConnected } = useAccount();
   const { data: walletClient } = useWalletClient();
-  const [quoteData, setQuoteData] = useState<QuoteData | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [action, setAction] = useState<string | null>(null);
-  const [wethBalance, setWethBalance] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
-
+  const nativeToken = getChainTokens(chain? chain.id: 148 ).find(t => t.isNative)!;
   const provider = new ethers.JsonRpcProvider(
     chain?.id === 146 ? "https://rpc.soniclabs.com" : `https://mainnet.infura.io/v3/${process.env.NEXT_PUBLIC_INFURA_API_KEY}`
   );
+  
 
-  const wethAddress = chain?.id === 146 ? "0x039e2fB66102314Ce7b64Ce5Ce3E5183bc94aD38" : "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
-  const usdcAddress = chain?.id === 146 ? "0x29219dd400f2Bf60E5a23d13Be72B486D4038894" : "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
 
-  const wethContract = new ethers.Contract(wethAddress, ["function balanceOf(address) view returns (uint256)"], provider);
+  type MessageType = {
+    content: string | React.ReactNode;
+    isBot: boolean;
+    status?: 'loading' | 'complete';
+  };
+  
+  type FlowStep = 
+    | 'connect'
+    | 'token_selection'
+    | 'action_selection'
+    | 'amount_input'
+    | 'confirmation';
+  
+  const [chatHistory, setChatHistory] = useState<MessageType[]>([{
+    content: "Welcome! I'm your Web3 trading assistant. Let's start by selecting a token to analyze.",
+    isBot: true,
+    status: 'complete'
+  }]);
+  const [flowStep, setFlowStep] = useState<FlowStep>('connect');
+  const [selectedToken, setSelectedToken] = useState<TokenConfig | null>(null);
+  const [swapAction, setSwapAction] = useState<'buy' | 'sell' | null>(null);
+  const [amount, setAmount] = useState('');
+  const [quoteData, setQuoteData] = useState<QuoteData | null>(null);
+  const [balance, setBalance] = useState<bigint >(BigInt(0));
+  const [inputError, setInputError] = useState<string | null>(null);
+  const [isSwapping, setIsSwapping] = useState(false);
+  const [balances, setBalances] = useState<{
+    native: bigint;
+    tokens: { [address: string]: bigint };
+  }>({
+    native: BigInt(0),
+    tokens: {}
+  });
+
+  const fetchBalance = useBalance({ address: address ? address : '0x' });
 
   useEffect(() => {
-    if (isConnected && address) {
-      wethContract.balanceOf(address).then((balance: bigint) => {
-        setWethBalance(ethers.formatEther(balance));
+    const fetchBalances = async () => {
+      if (!address || !chain) return;
+  
+      // Fetch native balance
+      const nativeBalance = await provider.getBalance(address);
+      
+      // Fetch token balances
+      const tokenBalances: { [address: string]: bigint } = {};
+      for (const token of getChainTokens(chain.id)) {
+        if (token.isNative) continue;
+        
+        const contract = new ethers.Contract(
+          token.address,
+          ['function balanceOf(address) view returns (uint256)'],
+          provider
+        );
+        tokenBalances[token.address] = await contract.balanceOf(address);
+      }
+  
+      setBalances({
+        native: nativeBalance,
+        tokens: tokenBalances
       });
+    };
+  
+    if (isConnected) {
+      fetchBalances();
+      const interval = setInterval(fetchBalances, 15000);
+      return () => clearInterval(interval);
     }
-  }, [isConnected, address]);
+  }, [isConnected, address, chain]);
 
-  const handleGetQuote = async () => {
-    if (!isConnected || ![1, 146].includes(chain?.id || 0)) {
-      alert("Connect to Ethereum or Sonic Mainnet first!");
-      return;
+  useEffect(() => {
+    if (isConnected) {
+      setFlowStep('token_selection');
+      setChatHistory(prev => [...prev, {
+        content: `Connected to ${address?.slice(0, 6)}...${address?.slice(-4)} on ${chain?.name}`,
+        isBot: true,
+        status: 'complete'
+      }]);
     }
-    if (!wethBalance || Number(wethBalance) < 0.01) {
-      alert("Insufficient WETH balance! Wrap some tokens first.");
-      return;
+    setBalance(fetchBalance.data?.value || BigInt(0));
+    
+  }, [isConnected, address, chain]);
+
+  async function fetchTokenBalance(tokenAddress: string) {
+  
+    if (tokenAddress === ethers.ZeroAddress) {
+      return fetchBalance.data?.value || BigInt(0);
     }
-    setLoading(true);
-    setAction("Fetching Quote...");
+  
+    const wethContract = new ethers.Contract(tokenAddress, ["function balanceOf(address) view returns (uint256)"], provider);
+    return wethContract.balanceOf(address)
+  }
+  
+  const handleSwapConfirmation = async () => {
+    if (!quoteData || !walletClient || !address || !chain ||!selectedToken || !swapAction ) return;
+  
+    setChatHistory(prev => [...prev, {
+      content: `Confirming ${swapAction} of ${amount} SONIC...`,
+      isBot: false
+    }]);
+
+    const swapConfig = {
+      chainId: chain.id,
+      walletAddress: address,
+      fromToken: swapAction === 'sell' ? selectedToken.address : nativeToken.address,
+      toToken: swapAction === 'buy' ? selectedToken.address : nativeToken.address,
+      amount
+    };
+    
     try {
-      const quote = await getKyberQuote(chain?.id?.toString() || "", wethAddress, usdcAddress, ethers.parseEther("0.01").toString(), address!);
-      setQuoteData(parseKyberQuote(quote));
-      console.log("Quote data:", parseKyberQuote(quote));
-      setSuccessMessage("Quote received! Ready to proceed.");
+      const txHash = await createKyberSwap(walletClient, quoteData.encodedSwapData, swapConfig );
+      setChatHistory(prev => [...prev, {
+        content: `Transaction successful! Hash: ${txHash}`,
+        isBot: true,
+        status: 'complete'
+      }]);
     } catch (error) {
-      console.error("Quote failed:", error);
-      setSuccessMessage(null);
-    } finally {
-      setLoading(false);
-      setAction(null);
+      const err = error as any 
+      setChatHistory(prev => [...prev, {
+        content: `Swap failed: ${err.message}`,
+        isBot: true,
+        status: 'complete'
+      }]);
     }
   };
 
-  const handleApprove = async () => {
-    if (!walletClient) return;
-    setLoading(true);
-    setAction("Approving WETH...");
+  const handleActionSelect = async (action: 'buy' | 'sell') => {
+    setSwapAction(action);
+    setFlowStep('amount_input');
+    
+    setChatHistory(prev => [...prev, {
+      content: action.charAt(0).toUpperCase() + action.slice(1),
+      isBot: false
+    }, {
+      content: `Enter the amount you want to ${action} in ${selectedToken?.symbol}`,
+      isBot: true,
+      status: 'complete'
+    }]);
+  };
+  
+  const handleAnalysis = async (tokenSymbol: string) => {
+    const analysis = await getCompleteMarketAnalysis(chain?.id || 146, tokenSymbol);
+    
+    setChatHistory(prev => [...prev, {
+      content: (
+        <div className="p-4 bg-gray-800 rounded-lg">
+          <h3 className="text-lg font-bold mb-2">🤖 AI Analysis</h3>
+          <p className="mb-2">{analysis.advice}</p>
+          <div className="flex gap-4 text-sm">
+            <span>Confidence: {analysis.confidence}%</span>
+           {/* <span>Risk: {analysis.riskAssessment}</span> */ }
+          </div>
+        </div>
+      ),
+      isBot: true,
+      status: 'complete'
+    }]);
+  };
+
+  const handleSwap = async () => {
+    
+    if (!amount || isNaN(Number(amount))) {
+      throw new Error("Please enter a valid amount");
+    }
+    
+    if (!selectedToken || !swapAction || !address || !chain) return;
+    
     try {
-      const weth = new ethers.Contract(wethAddress, ["function approve(address spender, uint256 amount) returns (bool)"], walletClient as unknown as ethers.Signer);
-      const tx = await weth.approve("0x6131B5fae19EA4f9D964eAc0408E4408b66337b5", ethers.parseEther("0.01"));
-      console.log("Approval tx:", tx);
-      setSuccessMessage("WETH Approved! Now execute the swap.");
+      setInputError(null);
+      
+      
+      const wrappedSonic = getChainTokens(chain.id).find(t => t.symbol === "WS")!;
+
+    const swapConfig = {
+      chainId: chain.id,
+      walletAddress: address,
+      fromToken: swapAction === 'sell' ? 
+        selectedToken.address : 
+        (selectedToken.isNative ? wrappedSonic.address : nativeToken.address),
+      toToken: swapAction === 'buy' ? 
+        selectedToken.address : 
+        wrappedSonic.address,
+      amount
+    };
+  
+      // Validate balance
+      const balance = await fetchTokenBalance(
+        swapAction === 'sell' ? selectedToken.address : wrappedSonic.address
+      );
+      console.log(balance, swapConfig)
+      validateAmount(
+        amount, 
+        ethers.formatUnits(balance, selectedToken.decimals),
+        selectedToken.decimals
+      );
+  
+      // Get and process quote
+      const quote = await getKyberQuote(swapConfig);
+      const parsedQuote = parseKyberQuote(quote, swapConfig.fromToken, swapConfig.toToken);
+      console.log(parsedQuote, quote )
+      
+      setQuoteData({
+        routeSummary: parsedQuote.routeSummary,
+        formattedToAmount: parsedQuote.outputAmount,
+        recommended_preset: parsedQuote.gasEstimate,
+        encodedSwapData: parsedQuote.encodedSwapData,
+        routerAddress: parsedQuote.routerAddress
+      });
+      setFlowStep('confirmation');
+  
+      setChatHistory(prev => [...prev, {
+        content: <QuoteDetails quote={parsedQuote} />,
+        isBot: true,
+        status: 'complete'
+      }, {
+        content: "Review swap details and confirm",
+        isBot: true,
+        status: 'complete'
+      }]);
+  
     } catch (error) {
-      console.error("Approval failed:", error);
-      setSuccessMessage(null);
-    } finally {
-      setLoading(false);
-      setAction(null);
+      const err= error as any
+      setInputError(err.message);
+      setChatHistory(prev => [...prev, {
+        content: err.message,
+        isBot: true,
+        status: 'complete'
+      }]);
     }
   };
-
-  const handleCreateOrder = async () => {
-    if (!quoteData) return;
-    if (!walletClient) {
-      alert("Wallet not connected! Please connect your wallet.");
-      return;
-    }
-
-    console.log("📊 Checking parsed Kyber Quote Data:", quoteData);
-
-    if (!quoteData.encodedSwapData || !quoteData.routerAddress) {
-      console.error("❌ Missing encodedSwapData or routerAddress in quoteData!");
-      alert("Swap cannot proceed: Invalid quote data.");
-      return;
-    }
-
-    setLoading(true);
-    setAction("Creating & Sending Order...");
-
+  
+  const executeSwap = async () => {
+    if (!quoteData || !walletClient || !selectedToken || !chain || !address) return;
+  
     try {
-      console.log("🚀 Requesting Kyber Swap transaction...");
-
-      const transaction = await createKyberSwap(chain?.id?.toString() || "", wethAddress, usdcAddress, ethers.parseEther("0.01").toString(), address!, quoteData);
-
-      console.log("📤 Sending transaction:", transaction);
-
-      // ✅ Send Transaction
-      const txHash = await walletClient.sendTransaction(transaction as any);
-
-      console.log("✅ Transaction sent! Hash:", txHash);
-      setSuccessMessage(`Swap submitted! TX: ${txHash}`);
+      setIsSwapping(true);
+      const chainTokens = getChainTokens(chain.id);
+      const nativeToken = chainTokens.find(t => t.isNative)!;
+      const wrappedToken = chainTokens.find(t => t.symbol === "WS")!;
+  
+      // Sanitize token addresses: use wrapped token address instead of native address
+      const fromTokenAddress = swapAction === 'sell' 
+        ? selectedToken.address 
+        : (nativeToken.address === ethers.ZeroAddress ? wrappedToken.address : nativeToken.address);
+      const toTokenAddress = swapAction === 'buy' 
+        ? selectedToken.address 
+        : (nativeToken.address === ethers.ZeroAddress ? wrappedToken.address : nativeToken.address);
+  
+      const txHash = await createKyberSwap(
+        walletClient,
+        quoteData,
+        {
+          chainId: chain.id,
+          walletAddress: address,
+          fromToken: fromTokenAddress,
+          toToken: toTokenAddress,
+          amount
+        }
+      );
+  
+      setChatHistory(prev => [...prev, {
+        content: `Transaction submitted: ${txHash}`,
+        isBot: true,
+        status: 'complete'
+      }]);
+  
+      const receipt = await waitForTransactionReceipt(config,{ hash: txHash });
+  
+      setChatHistory(prev => [...prev, {
+        content: `Confirmed in block ${receipt.blockNumber}`,
+        isBot: true,
+        status: 'complete'
+      }]);
+  
     } catch (error) {
-      console.error("❌ Swap failed:", error);
-      alert("Swap failed! Check console for details.");
+      const err = error as Error;
+      setChatHistory(prev => [...prev, {
+        content: `Swap failed: ${err.message}`,
+        isBot: true,
+        status: 'complete'
+      }]);
     } finally {
-      setLoading(false);
-      setAction(null);
+      setIsSwapping(false);
     }
   };
 
-  const [messages, setMessages] = useState<Array<{content: string; isAI: boolean}>>([]);
-  const [input, setInput] = useState("");
-
-  const addMessage = (content: string, isAI: boolean) => {
-    setMessages(prev => [...prev, { content, isAI }]);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim()) return;
-
-    // Ajouter le message utilisateur
-    addMessage(input, false);
-    setInput("");
-
-    // Simuler réponse AI
-    setLoading(true);
-    setTimeout(() => {
-      addMessage("Processing your request...", true);
-      handleGetQuote();
-      setLoading(false);
-    }, 1000);
-  };
-
+  
   return (
     <main className="flex flex-col h-screen bg-gradient-to-b from-gray-900 to-blue-900">
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         <div className="max-w-4xl mx-auto">
-          <div className="flex items-center justify-between mb-8">
+            <button
+              onClick={() => selectedToken && handleAnalysis(selectedToken.symbol)}
+              className="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg flex items-center gap-2"
+              disabled={!selectedToken}
+            >
+              <BotMessageSquare size={16} />
+              Analyze Token
+            </button>
+
             <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">
               Web3 AI Assistant
             </h1>
@@ -172,110 +352,198 @@ export default function Home() {
               showBalance={false}
               accountStatus="address"
             />
-          </div>
-
-          {/* Chat Container */}
-          <div className="bg-gray-800/50 backdrop-blur-lg rounded-2xl p-6 shadow-xl">
-            <div className="space-y-4 mb-4">
-              {messages.map((msg, i) => (
-                <div key={i} className={`flex ${msg.isAI ? "justify-start" : "justify-end"}`}>
-                  <div className={`p-3 rounded-2xl max-w-[80%] ${
-                    msg.isAI
-                      ? "bg-gray-700/50 text-white"
-                      : "bg-blue-600 text-white"
-                  }`}>
-                    <div className="flex items-center gap-2">
-                      {msg.isAI && <BotMessageSquare className="w-5 h-5 text-purple-400" />}
-                      <p className="leading-relaxed">{msg.content}</p>
-                      {!msg.isAI && <UserRound className="w-5 h-5 text-blue-200" />}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Formulaire de chat */}
-            <form onSubmit={handleSubmit} className="flex gap-2">
-              <input
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Ask me to swap tokens..."
-                className="flex-1 bg-gray-700/50 text-white rounded-xl p-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                disabled={loading}
-              />
-              <button
-                type="submit"
-                disabled={loading}
-                className="p-4 bg-blue-600 hover:bg-blue-700 rounded-xl text-white disabled:opacity-50 transition-all"
-              >
-                {loading ? (
-                  <Loader2 className="animate-spin h-6 w-6" />
-                ) : (
-                  <ArrowRight className="h-6 w-6" />
-                )}
-              </button>
-            </form>
-          </div>
+       
 
           {/* Wallet Info */}
           {isConnected && (
-            <div className="mt-6 bg-gray-800/50 p-4 rounded-xl backdrop-blur-lg">
-              <div className="grid grid-cols-2 gap-4 text-sm text-gray-300">
-                <div className="flex items-center gap-2">
-                  <Wallet className="w-5 h-5 text-blue-400" />
-                  <span>{address!.slice(0, 6)}...{address!.slice(-4)}</span>
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <div className="max-w-4xl mx-auto">
+              <div className="flex justify-between items-center mb-8">
+                <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">
+                  Web3 AI Assistant
+                </h1>
+                <ConnectButton
+                  label="Connect Wallet"
+                  chainStatus="icon"
+                  showBalance={false}
+                  accountStatus="address"
+                />
+              </div>
+          
+              {/* Chat Container */}
+              <div className="bg-gray-800/50 rounded-xl p-4 backdrop-blur-lg">
+                {/* Chat Messages */}
+                {chatHistory.map((msg, index) => (
+                  <Message key={index} isBot={msg.isBot}>
+                    {msg.content}
+                    {msg.status === 'loading' && (
+                      <Loader2 className="ml-2 h-4 w-4 animate-spin inline-block" />
+                    )}
+                  </Message>
+                ))}
+          
+                {/* Token Selection */}
+                {flowStep === 'token_selection' && (
+                  <div className="grid grid-cols-2 gap-2 mt-4">
+                    {getChainTokens(chain?.id || 146).map(token => (
+                      <button
+                        key={token.address}
+                        onClick={() => {
+                          setSelectedToken(token);
+                          setFlowStep('action_selection');
+                          setChatHistory(prev => [...prev, {
+                            content: `Selected ${token.symbol}`,
+                            isBot: false
+                          }, {
+                            content: `Would you like to Buy or Sell ${token.symbol}?`,
+                            isBot: true,
+                            status: 'complete'
+                          }]);
+                        }}
+                        className="bg-blue-600 hover:bg-blue-700 p-3 rounded-lg flex items-center gap-2 justify-center"
+                      >
+                        <CoinsIcon size={16} />
+                        {/* In your token selection buttons */}
+                        <div className="text-left">
+                          <div className="font-medium">{token.symbol}</div>
+                          <div className="text-xs opacity-75">
+                            Balance: {ethers.formatUnits(
+                              token.isNative 
+                                ? balances.native 
+                                : balances.tokens[token.address] || BigInt(0),
+                              token.decimals
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+          
+                
+
+            {flowStep === 'amount_input' && selectedToken && (
+              <div className="mt-4 space-y-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-400">Available:</span>
+                  <span className="font-mono">
+                    {ethers.formatUnits(
+                      swapAction === 'sell' 
+                        ? balances.tokens[selectedToken.address] 
+                        : balances.native,
+                      swapAction === 'sell' 
+                        ? selectedToken.decimals 
+                        : nativeToken.decimals
+                    )} {swapAction === 'sell' ? selectedToken.symbol : nativeToken.symbol}
+                  </span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <NetworkIcon className="w-5 h-5 text-purple-400" />
-                  <span>{chain?.name} (ID: {chain?.id})</span>
+
+                {inputError && (
+                  <div className="text-red-400 text-sm mt-2">
+                    <AlertCircle className="inline mr-1 h-4 w-4" />
+                    {inputError}
+                  </div>
+                )}
+
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    placeholder={`Enter ${swapAction === 'sell' ? selectedToken.symbol : nativeToken.symbol} amount`}
+                    className="w-full p-3 bg-gray-700 rounded-lg pr-24"
+                    step="any"
+                  />
+                  <div className="absolute right-3 top-3 flex gap-2">
+                    <button
+                      onClick={() => {
+                        const maxBalance = swapAction === 'sell'
+                          ? ethers.formatUnits(
+                              balances.tokens[selectedToken.address], 
+                              selectedToken.decimals
+                            )
+                          : ethers.formatUnits(balances.native, nativeToken.decimals);
+                        setAmount(maxBalance);
+                      }}
+                      className="px-2 py-1 text-xs bg-gray-600 rounded hover:bg-gray-500"
+                    >
+                      MAX
+                    </button>
+                    <span className="text-gray-400">
+                      {swapAction === 'sell' ? selectedToken.symbol : nativeToken.symbol}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 col-span-2">
-                  <CoinsIcon className="w-5 h-5 text-green-400" />
-                  <span>WETH Balance: {wethBalance ? `${wethBalance.slice(0, 6)}` : '0.00'} WETH</span>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => setFlowStep('action_selection')}
+                    className="p-2 bg-gray-600 rounded-lg hover:bg-gray-500"
+                  >
+                    Back
+                  </button>
+                  <button
+                    onClick={handleSwap}
+                    disabled={!amount}
+                    className="p-2 bg-blue-600 rounded-lg hover:bg-blue-500 disabled:opacity-50"
+                  >
+                    Next
+                  </button>
                 </div>
               </div>
+            )}
 
-              {successMessage && (
-                <div className="mt-4 p-3 bg-green-900/50 text-green-400 rounded-lg flex items-center gap-2">
-                  <CheckCircle className="w-5 h-5" />
-                  <span>{successMessage}</span>
-                </div>
-              )}
-
-              {quoteData && (
-                <div className="mt-4 flex gap-2">
+            
+            {flowStep === 'confirmation' && quoteData && (
+              <div className="mt-4 space-y-4">
+                <QuoteDetails quote={quoteData} />
+                
+                <div className="grid grid-cols-2 gap-2">
                   <button
-                    onClick={handleApprove}
-                    disabled={loading}
-                    className="flex-1 p-3 bg-yellow-600/50 hover:bg-yellow-700/50 rounded-lg text-yellow-100 disabled:opacity-50 transition-all"
+                    onClick={() => setFlowStep('amount_input')}
+                    className="p-2 bg-gray-600 rounded-lg hover:bg-gray-500"
                   >
-                    Approve WETH
+                    Back
                   </button>
                   <button
-                    onClick={handleCreateOrder}
-                    disabled={loading}
-                    className="flex-1 p-3 bg-green-600/50 hover:bg-green-700/50 rounded-lg text-green-100 disabled:opacity-50 transition-all"
+                    onClick={executeSwap}
+                    disabled={isSwapping}
+                    className="p-2 bg-green-600 rounded-lg hover:bg-green-500 disabled:opacity-50"
                   >
-                    Execute Swap
+                    {isSwapping ? (
+                      <Loader2 className="h-4 w-4 animate-spin mx-auto" />
+                    ) : (
+                      'Confirm Swap'
+                    )}
                   </button>
                 </div>
-              )}
+              </div>
+            )}
+
+                {/* Action Selection */}
+                {flowStep === 'action_selection' && (
+                  <div className="flex gap-2 mt-4">
+                    <button
+                      onClick={() => handleActionSelect('buy')}
+                      className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg"
+                    >
+                      Buy
+                    </button>
+                    <button
+                      onClick={() => handleActionSelect('sell')}
+                      className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg"
+                    >
+                      Sell
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
+          </div>
           )}
         </div>
       </div>
 
-      {/* Élément décoratif AI */}
-      <div className="absolute top-0 right-0 opacity-10">
-        <svg viewBox="0 0 200 200" className="w-96 h-96 text-blue-500">
-          <path
-            fill="currentColor"
-            d="M45,-78.3C57.1,-69.9,64.1,-55.1,69.5,-40.5C74.9,-25.9,78.6,-11.5,79.8,4.1C81,19.7,79.7,39.3,71.4,53.6C63.1,67.8,47.8,76.6,33.1,78.9C18.4,81.2,4.2,77,-8.7,70.8C-21.6,64.6,-34.3,56.3,-44.5,46C-54.7,35.7,-62.5,23.4,-68.7,8.3C-74.9,-6.8,-79.5,-24.7,-74.8,-38.1C-70.1,-51.5,-56.1,-60.4,-42.2,-68.1C-28.3,-75.7,-14.1,-82.1,1.8,-84.9C17.6,-87.7,35.3,-86.8,45,-78.3Z"
-            transform="translate(100 100)"
-          />
-        </svg>
-      </div>
     </main>
   );
 }

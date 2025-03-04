@@ -15,7 +15,7 @@ const sonic = {
   blockExplorers: { default: { name: "Sonic Explorer", url: "https://sonicscan.org" } },
 };
 
-const config = getDefaultConfig({
+export const config = getDefaultConfig({
   appName: "Web3 Buddy",
   projectId: "cfee1c46a7540f5a43cee18b0f4b0e36", // From walletconnect.com
   chains: [mainnet, sonic], // Add Sonic
