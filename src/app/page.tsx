@@ -383,6 +383,7 @@ export default function Home() {
         <div className="flex-1 flex gap-6 p-4">
           {/* Left Sidebar - Portfolio Summary */}
           {isConnected && (
+
             <div className="w-80 bg-gray-800/50 rounded-xl p-4 backdrop-blur-lg h-fit">
               <PortfolioDashboard portfolio={portfolio} metrics={metrics} />
               <button
@@ -401,7 +402,16 @@ export default function Home() {
             <div className="p-4 space-y-6 h-full flex flex-col">
               {/* Chat Messages */}
               <div className="space-y-4 flex-1 overflow-y-auto">
-              {chatHistory.map((msg, index) => (
+              {!isConnected ? (
+                  
+                    <div className="text-center text-white mb-4">
+                      <p>Please connect your wallet to continue.</p>
+                      <ConnectButton />
+                    </div>
+
+                ):
+                (<>
+                {chatHistory.map((msg, index) => (
                 <div key={index} className={`flex gap-3 ${msg.isBot ? 'items-start' : 'items-end'}`}>
                 <div className={`p-2 rounded-full ${msg.isBot ? 'bg-blue-500' : 'bg-purple-500'}`}>
                   {msg.isBot ? (
@@ -420,6 +430,9 @@ export default function Home() {
                 </div>
                 </div>
               ))}
+                </>)
+                }
+              
               </div>
         
               {/* Interactive Controls */}

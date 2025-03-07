@@ -1,13 +1,13 @@
 // components/AIHeader.tsx
 "use client";
-import { useContext } from "react";
+//import { useContext } from "react";
 import { useAccount } from "wagmi";
-import { AIMode } from "@/contexts/AIContext";
-import { AIContext } from "@/contexts/AIContext";
+// import { AIMode } from "@/contexts/AIContext";
+// import { AIContext } from "@/contexts/AIContext";
 
 export default function AIHeader() {
   const { chain } = useAccount();
-  const { mode, setMode } = useContext(AIContext);
+  //const { mode, setMode } = useContext(AIContext);
 
   return (
     <header className="flex items-center justify-between p-4 border-b border-gray-800">
@@ -20,13 +20,13 @@ export default function AIHeader() {
         </div>
         <div>
           <h2 className="font-semibold">Sonic Sage</h2>
-          <p className="text-sm text-gray-400 capitalize">{mode} mode</p>
+          {/* <p className="text-sm text-gray-400 capitalize">{mode} mode</p> */}
         </div>
       </div>
 
       {/* Right Side - Status */}
       <div className="flex items-center gap-4">
-        <div className="flex gap-1 bg-gray-900 p-1 rounded-lg">
+        {/* <div className="flex gap-1 bg-gray-900 p-1 rounded-lg">
           {(["analyst", "trader", "educator"] as AIMode[]).map((m) => (
             <button
               key={m}
@@ -40,7 +40,7 @@ export default function AIHeader() {
               {m}
             </button>
           ))}
-        </div>
+        </div> */}
         <div className="text-sm text-gray-400">
           {chain?.name} | Gas: 32 Gwei
         </div>
