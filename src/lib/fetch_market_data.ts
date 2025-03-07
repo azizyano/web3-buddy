@@ -8,15 +8,15 @@ const COINGECKO_API_URL = "https://api.coingecko.com/api/v3";
 // CoinGecko ID mapping config
 const COINGECKO_IDS = {
   ethereum: {
-    SONIC: "sonic",
+    S: "sonic",
     WETH: "weth",
     USDC: "usd-coin"
   },
   sonic: {
-    SONIC: "sonic-3",
+    S: "sonic-3",
     WS: "wrapped-sonic",
     WETH: "weth",
-    USDC: "usdc-pos"
+    USDC: "usd-coin"
   }
 } as const;
 
@@ -25,6 +25,11 @@ interface CoinGeckoMarketData {
   price_change_percentage_24h: number;
   price_change_percentage_7d: number;
   price_change_percentage_30d: number;
+  ath: { usd: number };
+  ath_change_percentage: { usd: number };
+  atl: { usd: number };
+  atl_change_percentage: { usd: number };
+  total_supply: number;
   market_cap: { usd: number };
   total_volume: { usd: number };
   circulating_supply: number;
@@ -60,7 +65,6 @@ export async function fetchCoinGeckoData(chainId: number, tokenSymbol: string): 
 
     const { market_data } = data;
     console.log("CoinGecko Data:", market_data);
-    
     return {
       priceUSD: market_data.current_price.usd.toString(),
       priceChange24hPercentage: market_data.price_change_percentage_24h.toString(),
@@ -69,6 +73,11 @@ export async function fetchCoinGeckoData(chainId: number, tokenSymbol: string): 
       marketCapUSD: market_data.market_cap.usd.toString(),
       volume24hUSD: market_data.total_volume.usd.toString(),
       circulatingSupply: market_data.circulating_supply.toString(),
+      athUSD: market_data.ath.usd.toString(),
+      athChangePercentage: market_data.ath_change_percentage.usd.toString(),
+      atlUSD: market_data.atl.usd.toString(),
+      atlChangePercentage: market_data.atl_change_percentage.usd.toString(),
+      totalSupply: market_data.total_supply.toString(),
       // Additional metrics for AI analysis
       dominance: (market_data.market_cap.usd / 1e9).toString(), // Market cap in billions
       liquidityScore: (market_data.total_volume.usd / market_data.market_cap.usd).toString(),
@@ -98,27 +107,48 @@ export async function fetchTokenMarketData(
     }
 
     // Fallback to chain data if CoinGecko fails
-    const baseMarketData = {
-      priceUSD: 0,
-      marketCapUSD: 0,
-      volume24hUSD: 0,
-      priceChange24hPercentage: 0,
-      priceChange7dPercentage: 0,
-      priceChange30dPercentage: 0,
-      circulatingSupply: 0,
+    const baseMarketData: CoinGeckoData = {
+      priceUSD: "0",
+      marketCapUSD: "0",
+      volume24hUSD: "0",
+      priceChange24hPercentage: "0",
+      priceChange7dPercentage: "0",
+      priceChange30dPercentage: "0",
+      circulatingSupply: "0",
+      athUSD: "0",
+      athChangePercentage: "0",
+      atlUSD: "0",
+      atlChangePercentage: "0",
+      totalSupply: "0",
+      dominance: "0",
+      liquidityScore: "0",
+      volatility: "0",
       ...coingeckoData
     };
 
     return {
       coingecko: baseMarketData,
       chainData: {
-        liquidity: tokenConfig?.liquidity || 0,
-        holders: tokenConfig?.holders || 0
+        liquidity:  0,
+        holders:  0
       }
     };
 
   } catch (error) {
     console.error("Market Data Error:", error);
+    return null;
+  }
+}
+
+export async function fetchTokenPrice(
+  chainId: number,
+  tokenSymbol: string
+): Promise<number | null> { // Changed return type to return price directly
+  try {
+    const coingeckoData = await fetchCoinGeckoData(chainId, tokenSymbol);
+    return coingeckoData ? parseFloat(coingeckoData.priceUSD) : null;
+  } catch (error) {
+    console.error("Price fetch error:", error);
     return null;
   }
 }

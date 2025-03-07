@@ -41,6 +41,10 @@ export interface MarketData {
     //kyber: KyberSwapData | null;
     coingecko: CoinGeckoData | null;
     aiAnalysis?: any;
+    chainData: {
+      liquidity: number;
+      holders: number;
+    };
 }
 
 
@@ -60,3 +64,62 @@ export interface KyberConfig {
     toToken: string;
     amount: string;
   }
+
+  export type AlertType = "market" | "wallet" | "gas" | "security";
+
+export interface AlertMessage {
+  type: AlertType;
+  content: string;
+  timestamp: number;
+  metadata?: {
+    token?: string;
+    changePercentage?: number;
+    gasPrice?: string;
+  };
+}
+
+export type AIMode = "analyst" | "trader" | "educator";
+
+export interface AIContextType {
+  mode: AIMode;
+  setMode: (mode: AIMode) => void;
+  isActive: boolean;
+  alerts: AlertMessage[];
+  addAlert: (alert: Omit<AlertMessage, "timestamp">) => void;
+  dismissAlert: (timestamp: number) => void;
+  modeConfig: ModeConfig;
+}
+
+export interface ModeConfig {
+  responseStyle: string;
+  defaultPrompt: string;
+  color: string;
+}
+
+// types/portfolio.d.ts
+export interface PortfolioAsset {
+  symbol: string;
+  balance: number;
+  valueUSD: number;
+  allocation: number;
+  volatility: number;
+  chain: string;
+}
+
+export interface PortfolioMetrics {
+  totalValue: number;
+  riskScore: number;
+  diversityIndex: number;
+  topPerformer: string;
+  worstPerformer: string;
+}
+
+export interface SwapPreview {
+  fromAmount: number;
+  toAmount: number;
+  priceImpact: number;
+  slippage: number;
+  fees: number;
+  route: string[];
+  riskLevel: "low" | "medium" | "high";
+}

@@ -10,7 +10,8 @@ interface AIAnalysis {
 
 export async function fetchAiMarketData(
   marketData: MarketData,
-  tokenSymbol: string
+  tokenSymbol: string,
+  prompt: string
 ): Promise<AIAnalysis> {
   try {
     if (!marketData?.coingecko) {
@@ -26,7 +27,7 @@ export async function fetchAiMarketData(
       volume24hUSD
     } = marketData.coingecko;
 
-        const prompt = `You are a senior crypto financial advisor. Analyze the following market data for ${tokenSymbol}. Respond with a raw JSON object (no markdown, no code blocks) in this exact format:
+        const prompt_0 = `You are a senior crypto financial advisor. Analyze the following market data for ${tokenSymbol}. Respond with a raw JSON object (no markdown, no code blocks) in this exact format:
     {
     "action": "BUY|SELL|HOLD",
     "confidence": number,
@@ -56,7 +57,7 @@ export async function fetchAiMarketData(
         "X-API-Key": process.env.DEEPSEEK_API_KEY!
       },
       body: JSON.stringify({
-        prompt,
+        prompt: prompt === '' ? prompt_0 : prompt,
         max_tokens: 500,
         temperature: 0.7
       })

@@ -67,15 +67,8 @@ export async function createKyberSwap(
   try {
     if (!walletClient) throw new Error("Wallet not connected");
 
-    // Get wrapped token info
-    const wrappedSonic = WHITELIST.find(t => t.chainId === config.chainId && t.symbol === "WS")!;
-    const fromTokenDecimals = WHITELIST.find(t => t.address === config.fromToken)?.decimals || 18;
-    
-    // Determine if source token is native and needs wrapped amount
-    const isNative = config.fromToken === ethers.ZeroAddress;
-    const amount = ethers.parseUnits(config.amount, fromTokenDecimals);
-
     const tx = {
+      from: config.walletAddress,
       to: quoteData.routerAddress,
       data: quoteData.encodedSwapData,
       value: "0",
@@ -85,6 +78,7 @@ export async function createKyberSwap(
         name: config.chainId === 146 ? "sonic" : "ethereum"
       }
     };
+    console.log("Kyber swap tx:", tx)
 
     const hash = await walletClient.sendTransaction(tx);
     return hash;

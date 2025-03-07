@@ -16,7 +16,7 @@ export interface TokenConfig {
       chainId: 146,
       address: ethers.ZeroAddress, // Native token
       symbol: "S",
-      name: "Sonic Native Token",
+      name: "Sonic",
       decimals: 18,
       isNative: true
     },

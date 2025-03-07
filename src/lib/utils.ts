@@ -1,6 +1,10 @@
 import { ethers } from "ethers";
 import { WHITELIST } from "@/config/tokens";
 
+export function cn(...classes: (string | boolean | undefined)[]) {
+  return classes.filter(Boolean).join(" ");
+}
+
 export function validateChain(chainId: number) {
   if (chainId !== 146 && chainId !== 1) {
     throw new Error("Unsupported network. Please switch to Sonic or Ethereum");

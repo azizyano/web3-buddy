@@ -1,7 +1,7 @@
 // lib/market.ts
 import { fetchAiMarketData } from "./deepseek";
 import { fetchTokenMarketData } from "./fetch_market_data";
-import { MarketData } from "@/types/type";
+
 
 export async function getCompleteMarketAnalysis(
   chainId: number,
@@ -18,7 +18,7 @@ export async function getCompleteMarketAnalysis(
   }
 
   try {
-    return await fetchAiMarketData(marketData, tokenSymbol);
+    return await fetchAiMarketData(marketData, tokenSymbol, '');
   } catch (error) {
     console.error("AI Analysis Failed:", error);
     return {
