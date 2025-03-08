@@ -4,7 +4,7 @@
 import { SwapPreview } from "@/types/type";
 import { Progress } from "@/components/ui/progress";
 import { useAIContext } from "@/contexts/AIContext";
-import { ArrowRight, PuzzleIcon, ChevronRight } from "lucide-react";
+import { ArrowRight, PuzzleIcon } from "lucide-react";
 import { formatEther } from "ethers";
 
 const RISK_COLORS = {
@@ -64,12 +64,7 @@ export default function SwapPreviewCard({ preview }: { preview: SwapPreview }) {
 
         {/* Route Visualization */}
         <div className="flex items-center gap-1 text-xs text-gray-400 flex-wrap">
-          {preview.route.map((token, i) => (
-            <PuzzleIcon key={token}>
-              <span>{token}</span>
-              {i < preview.route.length - 1 && <ChevronRight className="w-3 h-3" />}
-            </PuzzleIcon>
-          ))}
+          <PuzzleIcon></PuzzleIcon>
         </div>
       </div>
     </div>

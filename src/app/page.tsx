@@ -61,7 +61,21 @@ export default function Home() {
     | 'action_selection'
     | 'amount_input'
     | 'confirmation';
-
+    const handleRestart = () => {
+      setFlowStep('token_selection');
+      setChatHistory( [ {
+        content: `Connected to ${address?.slice(0, 6)}...${address?.slice(-4)} on ${chain?.name}`,
+        isBot: true,
+        status: 'complete'
+      }]);
+      setSelectedToken(null);
+      setSwapAction(null);
+      setAmount('');
+      setQuoteData(null);
+      setInputError(null);
+      setIsSwapping(false);
+      setPreview(null);
+    };
   const [chatHistory, setChatHistory] = useState<MessageType[]>([{
     content: "Welcome! I'm your Web3 trading assistant. Let's start by selecting a token to analyze.",
     isBot: true,
@@ -387,13 +401,22 @@ export default function Home() {
             <div className="w-80 bg-gray-800/50 rounded-xl p-4 backdrop-blur-lg h-fit">
               <PortfolioDashboard portfolio={portfolio} metrics={metrics} />
               <button
+                onClick={() => handleRestart()}
+                className="w-full mt-4 bg-purple-600 hover:bg-purple-700 p-3 rounded-lg flex items-center justify-center gap-2"
+                
+              >
+                <BotMessageSquare size={18} />
+                New Chat
+              </button>
+              {selectedToken && <button
                 onClick={() => selectedToken && handleAnalysis(selectedToken.symbol)}
                 className="w-full mt-4 bg-purple-600 hover:bg-purple-700 p-3 rounded-lg flex items-center justify-center gap-2"
                 disabled={!selectedToken}
               >
                 <BotMessageSquare size={18} />
-                Analyze Selected Token
-              </button>
+                Analyze {selectedToken.symbol} Market
+              </button>}
+              
             </div>
           )}
   
