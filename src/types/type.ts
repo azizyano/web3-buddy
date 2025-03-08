@@ -54,7 +54,17 @@ export interface KyberQuote {
   encodedSwapData: string;
   inputAmount: string;
   outputAmount: string;
-  gasEstimate: string;
+  gasPriceGwei: string;
+  totalGas: string;
+  tokens: Record<string, TokenData>;
+}
+
+export interface TokenData {
+  address: string;
+  symbol: string;
+  name: string;
+  price: number;
+  decimals: number;
 }
 
 export interface KyberConfig {

@@ -73,10 +73,7 @@ export async function createKyberSwap(
       data: quoteData.encodedSwapData,
       value: "0",
       gas: BigInt(quoteData.gas || 300000),
-      chain: {
-        id: config.chainId,
-        name: config.chainId === 146 ? "sonic" : "ethereum"
-      }
+      
     };
     console.log("Kyber swap tx:", tx)
 
@@ -106,14 +103,10 @@ export function parseKyberQuote(data: any, fromToken: string, toToken: string): 
     routeSummary: data.swaps || [],
     routerAddress: data.routerAddress,
     encodedSwapData: data.encodedSwapData,
-    inputAmount: ethers.formatUnits(
-      data.inputAmount,
-      fromTokenInfo.decimals
-    ),
-    outputAmount: ethers.formatUnits(
-      data.outputAmount,
-      toTokenInfo?.decimals || 18
-    ),
-    gasEstimate: ethers.formatUnits(data.gas || "0", "gwei")
+    inputAmount: data.inputAmount,
+    outputAmount: data.outputAmount,
+    gasPriceGwei: data.gasPrice,
+    totalGas: data.totalGas,
+    tokens: data.tokens,
   };
 }
