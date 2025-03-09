@@ -10,7 +10,7 @@ export const QuoteDetails = ({ quote }: { quote: KyberQuote }) => (
         </div>
         <div className="flex justify-between">
           <span>Estimated Gas:</span>
-          <span>{quote.gasEstimate} Gwei</span>
+          <span>{quote.gasPriceGwei} Gwei</span>
         </div>
         <div className="flex justify-between">
           <span>Route Steps:</span>
