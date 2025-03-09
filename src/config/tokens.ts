@@ -41,7 +41,34 @@ export interface TokenConfig {
       name: "USD Coin",
       decimals: 6
     },
-  
+    {
+      chainId: 146,
+      address: "0x005851f943ee2957B1748957F26319e4f9EdeBC1",
+      symbol: "AG",
+      name: "Silver",
+      decimals: 18
+    },
+    {
+      chainId: 146,
+      address: "0x79bbF4508B1391af3A0F4B30bb5FC4aa9ab0E07C",
+      symbol: "ANON",
+      name: "HeyAnon",
+      decimals: 18
+    },
+    {
+      chainId: 146,
+      address: "0x7B0a41f0c17474e41a0c36c0Bf33b9AED06eE9f5",
+      symbol: "SNS",
+      name: "Sonic Name Service",
+      decimals: 18
+    },
+    {
+      chainId: 146,
+      address: "0xE51EE9868C1f0d6cd968A8B8C8376Dc2991BFE44",
+      symbol: "BRUSH",
+      name: "Paint Swap",
+      decimals: 18
+    },
     // Ethereum Mainnet Tokens
     {
       chainId: 1,

@@ -16,7 +16,11 @@ const COINGECKO_IDS = {
     S: "sonic-3",
     WS: "wrapped-sonic",
     WETH: "weth",
-    USDC: "usd-coin"
+    USDC: "usd-coin",
+    AG: "silver-2",
+    ANON: "heyanon",
+    SNS: "sonic-name-service",
+    BRUSH: "paint-swap"
   }
 } as const;
 

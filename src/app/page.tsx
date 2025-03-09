@@ -121,6 +121,7 @@ export default function Home() {
   const [inputError, setInputError] = useState<string | null>(null);
   const [isSwapping, setIsSwapping] = useState(false);
   const [preview, setPreview] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
 
   const [balances, setBalances] = useState<{
     native: bigint;
@@ -236,8 +237,10 @@ export default function Home() {
   };
 
   const handleAnalysis = async (tokenSymbol: string) => {
+    setLoading(true);
+   
     const analysis = await getCompleteMarketAnalysis(chain?.id || 146, tokenSymbol);
-
+    
     setChatHistory(prev => [...prev, {
       content: (
         <div className="p-4 bg-gray-800 rounded-lg">
@@ -251,6 +254,7 @@ export default function Home() {
       isBot: true,
       status: 'complete'
     }]);
+    setLoading(false);
   };
 
   const handleSwap = async () => {
@@ -485,6 +489,8 @@ export default function Home() {
               >
                 <BotMessageSquare size={18} />
                 Analyze {selectedToken.symbol} Market
+                {loading && <Loader2 className="w-5 h-5 animate-spin" />}
+                
               </button>
             )}
           </div>
