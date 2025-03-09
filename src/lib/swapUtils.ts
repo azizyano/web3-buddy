@@ -1,25 +1,26 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // lib/swapUtils.ts
 import { SwapPreview } from "@/types/type";
-import {getKyberQuote} from "./kyberswap"
+
 export async function generateSwapPreview(
     chainId: number,
     walletAddress: string,
     fromToken: string,
     toToken: string,
-    NuAmount: number
+    NuAmount: number,
+    quote: any
   ): Promise<SwapPreview> {
-    const amount = NuAmount.toString()
-    const quote = await getKyberQuote({chainId, walletAddress, fromToken, toToken, amount});
+    
     console.log("Quote:", quote);
     const priceImpact = ((quote.amountInUsd-quote.amountOutUsd)/quote.amountInUsd)* 100;
-    const slippage = ((quote.amountOutUsd - quote.receivedUsd)/quote.amountOutUsd) * 100;
+    const slippage = ((quote.amountOutUsd - quote.amountInUsd)/quote.amountOutUsd) * 100;
     return {
-      fromAmount: NuAmount,
-      toAmount: quote.outputAmount,
+      fromAmount: quote.amountIn,
+      toAmount: quote.amountOut,
       priceImpact: priceImpact,
       slippage: slippage,
-      fees: quote.feesUSD,
-      route: quote.swaps,
+      fees: quote.l1FeeUsd,
+      route: quote.route,
       riskLevel: calculateRiskLevel(
         priceImpact,
         slippage

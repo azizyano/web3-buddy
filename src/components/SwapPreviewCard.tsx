@@ -36,7 +36,7 @@ export default function SwapPreviewCard({ preview }: { preview: SwapPreview }) {
       <div className="space-y-3">
         {/* Main Swap */}
         <div className="flex items-center justify-between font-mono">
-          <span>-{preview.fromAmount.toFixed(4)}</span>
+          <span>-{formatEther(preview.fromAmount)}</span>
           <ArrowRight className="mx-2 text-gray-400" />
           <span>+{formatEther(preview.toAmount)}</span>
         </div>

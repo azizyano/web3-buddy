@@ -358,7 +358,8 @@ export default function Home() {
         address,
         fromToken,
         toToken,
-        parseFloat(amount)
+        parseFloat(amount),
+        parsedQuote.routeSummary
       );
       setPreview(preview);
 
@@ -429,7 +430,7 @@ export default function Home() {
         }
       }
 
-      const txHash = await createKyberSwap(walletClient, quoteData, swapConfig);
+      const txHash = await createKyberSwap(walletClient, quoteData, swapConfig) as `0x${string}`;
 
       setChatHistory(prev => [...prev, {
         content: `Transaction submitted: ${txHash}`,
